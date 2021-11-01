@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+  <body>
+    <div id="container">
+      <div class="item" id="code-item">
+        <textarea id="code"></textarea>
+        <button id="code-submit">submit code</button>
+      </div>
+      <div class="item">
+        <canvas id="canvas" width="64" height="64"></canvas>
+      </div>
+      <div class="item" id="btn-item">
+        <button id="play-pause" class="big-btn"></button>
+      </div>
+      <div class="item" id="data-item">
+        <textarea id="data"></textarea>
+        <div>
+          <button id="hex-submit" title="i promise this is all hex code">write hex</button>
+          <button id="text-submit">write ascii</button>
+        </div>
+      </div>
+    </div>
+  </body>
+  <script type="module">
+    import './scripts/main.js';
+  </script>
+  <style>
+    #container {
+      display: grid;
+      gap: 5px;
+      grid-template-columns: 25% max-content;
+      width: 1000px;
+    }
+    #canvas {
+      display: grid;
+      image-rendering: crisp-edges;
+      width: 512px;
+    }
+    #code-item {
+      display: grid;
+      grid-template-rows: 90% 10%;
+    }
+    #data-item {
+      grid-column: 2;
+      display: grid;
+      grid-template-columns: 90% 10%;
+    }
+    #btn-item {
+      display: grid;
+      grid-template-columns: 25% 75%;
+    }
+    .big-btn {
+      font-size: xx-large;
+    }
+    .item {
+      background-color: lightpink;
+      border-radius: 5px;
+      padding: 5px;
+    }
+  </style>
+</html>
