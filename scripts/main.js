@@ -14,8 +14,8 @@ let canvas = document.getElementById('canvas');
 let ctx = canvas.getContext('2d', { alpha: false });
 
 const csize = 64;
-const pcls = { x: 63, y: 63 };
-const pcms = { x: 62, y: 63 };
+const pcls = idx_to_addr(0o7777);
+const pcms = idx_to_addr(0o7776);
 let memory = new Uint8Array(csize * csize);
 
 let jumped = false;
@@ -24,7 +24,6 @@ let prog = [];
 
 let running = false;
 let timeout = undefined;
-
 
 play_btn.addEventListener('click', ev => {
   if (running) {
@@ -37,6 +36,24 @@ play_btn.addEventListener('click', ev => {
     do_cycle();
   }
 });
+
+function idx_to_addr(idx) {
+  return {
+    type: 'a',
+    x: idx & 0o77,
+    y: (idx & 0o7700) >> 6,
+    addr: idx,
+  };
+}
+
+function write_byte(addr, byte) {
+  memory[addr.addr] = byte;
+  write_pixel(addr.x, addr.y, byte);
+}
+
+function read_byte(idx) {
+  return memory[idx];
+}
 
 function write_pixel(x, y, byte) {
   let id = ctx.createImageData(1, 1);
@@ -67,39 +84,26 @@ function read_pixel(x, y) {
 data_btn.addEventListener('click', _ => {
   let data = data_input.value;
   for (let iii = 0, jjj = 0; iii < data.length; iii += 2, jjj++) {
-    let y = Math.floor(jjj / csize);
-    let x = jjj - y * csize;
-    write_pixel(x, y, parseInt(data.slice(iii, iii + 2), 16));
+    let byte = parseInt(data.slice(iii, iii + 2), 16);
+    let addr = idx_to_addr(jjj);
+    write_byte(addr, byte);
   }
 });
 
 ascii_btn.addEventListener('click', _ => {
   let data = data_input.value;
   for (let iii = 0; iii < data.length; iii++) {
-    let y = Math.floor(iii / csize);
-    let x = iii - y * csize;
-    write_pixel(x, y, data.charCodeAt(iii));
+    let byte = data.charCodeAt(iii);
+    let addr = idx_to_addr(iii);
+    write_byte(addr, byte);
   }
 });
 
-function parse_addr(str) {
-  let x = str.slice(1, 3);
-  let y = str.slice(-2);
-  if (str[3] === 'x') {
-    x = parseInt(x);
-    y = parseInt(y);
-  } else {
-    x = parseInt(x, 8);
-    y = parseInt(y, 8);
-  }
-  return { x, y, type: 'a', addr: x + (y << 8) };
-}
-
-function parse_ptr(str) {
-  let xptr = parse_addr(str);
-  let yptr =
-    xptr.x === 0 ? { x: 63, y: xptr.x - 1 } : { x: xptr.x - 1, y: xptr.y };
-  return { xptr, yptr, type: 'p' };
+function parse_addr(str, type) {
+  let idx = parseInt(str.slice(-4), 8);
+  let addr = idx_to_addr(idx);
+  addr.type = type;
+  return addr;
 }
 
 function compile(code) {
@@ -113,7 +117,8 @@ function compile(code) {
     }
   }
   let operations = [];
-  for (let line of lines) {
+  for (let idx in lines) {
+    let line = lines[idx];
     if (line.endsWith(':')) {
       continue;
     }
@@ -124,10 +129,10 @@ function compile(code) {
     for (let str of operand_strings) {
       switch (str[0]) {
         case '$':
-          operands.push(parse_addr(str));
+          operands.push(parse_addr(str, 'a'));
           break;
         case '@':
-          operands.push(parse_ptr(str));
+          operands.push(parse_addr(str, 'p'));
           break;
         case ':':
           operands.push(labels[str.slice(1)]);
@@ -136,40 +141,40 @@ function compile(code) {
           operands.push(parseInt(str));
       }
     }
-    operations.push({ operation, operands });
+    operations.push({ line_no: idx, operation, operands });
   }
   return operations;
 }
 
 code_btn.addEventListener('click', _ => {
   prog = compile(code_input.value);
-  write_pixel(pcls.x, pcls.y, 0);
-  write_pixel(pcms.x, pcms.y, 0);
+  write_byte(pcls, 0);
+  write_byte(pcms, 0);
 });
 
 function get_addr_from_ptr(ptr) {
-  let x = read_pixel(ptr.xptr.x, ptr.xptr.y);
-  let y = read_pixel(ptr.yptr.x, ptr.yptr.y);
-  return { x: x & 63, y: y & 63 };
+  let x = read_byte(ptr.addr) & 0o77;
+  let y = read_byte(ptr.addr - 1) & 0o77;
+  return idx_to_addr(x + (y << 6));
 }
 
 function get_value(operand) {
   if (typeof operand === 'number') {
     return operand;
   } else if (operand.type === 'a') {
-    return read_pixel(operand.x, operand.y);
+    return read_byte(operand.addr);
   } else {
     let addr = get_addr_from_ptr(operand);
-    return read_pixel(addr.x, addr.y);
+    return read_byte(addr.addr);
   }
 }
 
 function set_byte(addr_op, value) {
   if (addr_op.type === 'a') {
-    write_pixel(addr_op.x, addr_op.y, value & 0xff);
+    write_byte(addr_op, value);
   } else {
     let addr = get_addr_from_ptr(addr_op);
-    write_pixel(addr.x, addr.y, value & 0xff);
+    write_byte(addr, value);
   }
 }
 
@@ -210,8 +215,8 @@ function do_op(operation, operands) {
     }
     case 'jmp': {
       // set the pc to the 16 bit number at (0)
-      write_pixel(pcls.x, pcls.y, operands[0]);
-      write_pixel(pcms.x, pcms.y, operands[0] >> 8);
+      write_byte(pcls, operands[0]);
+      write_byte(pcms, operands[0] >> 8);
       jumped = true;
       break;
     }
@@ -219,18 +224,18 @@ function do_op(operation, operands) {
 }
 
 function do_cycle() {
-  let pc = read_pixel(pcls.x, pcls.y) | (read_pixel(pcms.x, pcms.y) << 8);
+  let pc = read_byte(pcls.addr) | (read_byte(pcms.addr) << 8);
   if (prog.length !== 0 && pc < prog.length) {
     let operation = prog[pc];
     do_op(operation.operation, operation.operands);
   }
   if (jumped) {
-    pc = read_pixel(pcls.x, pcls.y) | (read_pixel(pcms.x, pcms.y) << 8);
+    pc = read_byte(pcls.addr) | (read_byte(pcms.addr) << 8);
     jumped = false;
   } else {
     pc += 1;
-    write_pixel(pcls.x, pcls.y, pc);
-    write_pixel(pcms.x, pcms.y, pc >> 8);
+    write_byte(pcls, pc);
+    write_byte(pcms, pc >> 8);
   }
   timeout = setTimeout(do_cycle, 1);
 }
